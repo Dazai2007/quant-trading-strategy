@@ -15,8 +15,9 @@
     take_profit_atr: 4.8
     max_drawdown: 0.10
 backtest:
+  source: "yahoo"
   initial_capital: 10000
-  symbol: "BTC/USDT"
+  symbol: "BTC-USD"
   timeframe: "1h"
   limit: 1000
   fee: 0.001
