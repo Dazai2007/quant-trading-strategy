@@ -39,7 +39,6 @@ def main():
     
     if df is None or df.empty:
         print("Warning: Failed to fetch real data. Using mock data for demonstration.")
-        # Mock data generation
         dates = pd.date_range(start='2023-01-01', periods=limit, freq=timeframe)
         df = pd.DataFrame({
             'timestamp': dates,
@@ -75,7 +74,11 @@ def main():
 
     # 3. Backtest / Execution Simulation
     print("\n[3] Backtest & Execution Simulation")
-    engine = BacktestEngine(initial_capital=config['backtest']['initial_capital'])
+    engine = BacktestEngine(
+        initial_capital=config['backtest']['initial_capital'], 
+        fee=config['backtest'].get('fee', 0.001),
+        max_drawdown=config['strategy']['risk'].get('max_drawdown', 0.20)
+    )
     logic = StrategyLogic(config)
 
     def strategy_wrapper(row, capital, current_position):
@@ -89,6 +92,10 @@ def main():
     ret = ((final_equity - initial_cap) / initial_cap) * 100
     print(f"Final Equity: ")
     print(f"Total Return: {ret:.2f}%")
+    
+    # Check if circuit breaker triggered
+    if engine.guardrails.circuit_breaker_triggered:
+        print("!!! CIRCUIT BREAKER TRIGGERED: Trading Halted due to Max Drawdown !!!")
 
     # 4. Visualization
     print("\n[4] Visualization")

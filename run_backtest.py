@@ -68,7 +68,7 @@ def main():
 
     # 4. Run Backtest
     print("Running backtest engine...")
-    engine = BacktestEngine(initial_capital=config['backtest']['initial_capital'])
+    engine = BacktestEngine(initial_capital=config['backtest']['initial_capital'], fee=config['backtest'].get('fee', 0.0))
     logic = StrategyLogic(config)
     
     def strategy_wrapper(row, capital, current_position):

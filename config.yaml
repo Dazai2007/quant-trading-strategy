@@ -1,20 +1,21 @@
 ﻿strategy:
   target_volatility: 0.20
   indicators:
-    ma_short: 50
-    ma_long: 200
-    rsi_period: 14
+    ma_short: 21
+    ma_long: 140
+    rsi_period: 28
     rsi_overbought: 70
     rsi_oversold: 30
     bb_window: 20
     bb_std: 2
     atr_window: 14
   risk:
-    stop_loss_atr: 2.0
-    take_profit_atr: 4.0
-    max_drawdown: 0.20
+    stop_loss_atr: 4.0
+    take_profit_atr: 4.8
+    max_drawdown: 0.04
 backtest:
   initial_capital: 10000
   symbol: "BTC/USDT"
   timeframe: "1h"
   limit: 1000
+  fee: 0.001

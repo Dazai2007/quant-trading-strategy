@@ -1,22 +1,21 @@
 ﻿import pandas as pd
 import numpy as np
+from risk.guardrails import RiskGuardrails
 
 class BacktestEngine:
-    def __init__(self, initial_capital=10000.0):
+    def __init__(self, initial_capital=10000.0, fee=0.001, max_drawdown=0.20):
         self.initial_capital = initial_capital
         self.capital = initial_capital
-        self.positions = [] # List of trade history
-        self.current_position = {'quantity': 0.0, 'entry_price': 0.0} # Net position
+        self.fee = fee
+        self.positions = [] 
+        self.current_position = {'quantity': 0.0, 'entry_price': 0.0} 
         self.equity_curve = []
+        self.peak_equity = initial_capital
+        self.guardrails = RiskGuardrails(max_drawdown)
 
     def run(self, data, strategy_logic):
         """
-        Event-driven backtest loop with Position Management.
-        
-        Args:
-            data (pd.DataFrame): OHLCV data with indicators.
-            strategy_logic (function): Function that returns (signal, size).
-                                     signal: 1 (Buy), -1 (Sell), 2 (Close Long), -2 (Close Short)
+        Event-driven backtest loop with Position Management and Circuit Breaker.
         """
         for index, row in data.iterrows():
             current_price = row['close']
@@ -25,33 +24,37 @@ class BacktestEngine:
             unrealized_pnl = self.current_position['quantity'] * (current_price - self.current_position['entry_price'])
             portfolio_value = self.capital + unrealized_pnl
             
+            # Update Peak Equity
+            if portfolio_value > self.peak_equity:
+                self.peak_equity = portfolio_value
+            
             self.equity_curve.append({'timestamp': row['timestamp'], 'equity': portfolio_value})
             
-            # 2. Get Strategy Signal
-            # Pass current position info to strategy
+            # 2. Check Circuit Breaker
+            if self.guardrails.check_circuit_breaker(portfolio_value, self.peak_equity):
+                # Close all positions if not already closed
+                if self.current_position['quantity'] != 0:
+                    self._close_position(current_price)
+                continue # Skip strategy logic (Halt Trading)
+
+            # 3. Get Strategy Signal
             signal, size = strategy_logic(row, portfolio_value, self.current_position)
             
-            # 3. Execute Signal
+            # 4. Execute Signal
             if signal == 0:
                 continue
 
             # Buy / Open Long
             if signal == 1:
-                # If short, close first
                 if self.current_position['quantity'] < 0:
                     self._close_position(current_price)
-                
-                # Open new long
                 qty = size / current_price
                 self._open_position(qty, current_price)
 
             # Sell / Open Short
             elif signal == -1:
-                # If long, close first
                 if self.current_position['quantity'] > 0:
                     self._close_position(current_price)
-                
-                # Open new short
                 qty = size / current_price
                 self._open_position(-qty, current_price)
 
@@ -67,13 +70,14 @@ class BacktestEngine:
         return pd.DataFrame(self.equity_curve)
 
     def _open_position(self, quantity, price):
+        cost = abs(quantity * price)
+        fee_amt = cost * self.fee
+        self.capital -= fee_amt
+        
         self.current_position['quantity'] += quantity
-        # Weighted average entry price (simplified: just update if flat, else average)
-        # For simplicity in this demo, we assume full re-entry or adding
         if self.current_position['entry_price'] == 0:
              self.current_position['entry_price'] = price
         else:
-            # Update avg price
             total_val = (self.current_position['quantity'] - quantity) * self.current_position['entry_price'] + quantity * price
             self.current_position['entry_price'] = total_val / self.current_position['quantity']
 
@@ -81,14 +85,15 @@ class BacktestEngine:
         qty = self.current_position['quantity']
         entry = self.current_position['entry_price']
         pnl = qty * (price - entry)
+        cost = abs(qty * price)
+        fee_amt = cost * self.fee
         
-        self.capital += pnl
+        self.capital += (pnl - fee_amt)
         self.positions.append({
             'entry_price': entry,
             'exit_price': price,
             'quantity': qty,
-            'pnl': pnl
+            'pnl': pnl - fee_amt,
+            'fee': fee_amt
         })
-        
-        # Reset
         self.current_position = {'quantity': 0.0, 'entry_price': 0.0}
