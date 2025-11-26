@@ -1,4 +1,4 @@
-ccxt
+﻿ccxt
 pandas
 numpy
 scikit-learn
@@ -6,3 +6,4 @@ arch
 matplotlib
 scipy
 pyarrow
+python-dotenv

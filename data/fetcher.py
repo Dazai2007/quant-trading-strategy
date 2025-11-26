@@ -1,10 +1,30 @@
 ﻿import ccxt
 import pandas as pd
 import time
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class DataFetcher:
     def __init__(self, exchange_id='binance'):
-        self.exchange = getattr(ccxt, exchange_id)()
+        self.exchange_id = exchange_id
+        exchange_class = getattr(ccxt, exchange_id)
+        
+        # Check for API keys in environment
+        api_key = os.getenv(f'{exchange_id.upper()}_API_KEY')
+        secret = os.getenv(f'{exchange_id.upper()}_SECRET')
+        
+        config = {}
+        if api_key and secret:
+            config = {
+                'apiKey': api_key,
+                'secret': secret,
+                'enableRateLimit': True
+            }
+            
+        self.exchange = exchange_class(config)
         self.exchange.load_markets()
 
     def fetch_ohlcv(self, symbol, timeframe='1h', limit=1000):
