@@ -14,6 +14,8 @@ This project implements a comprehensive quantitative trading strategy for Bitcoi
 -   isk/: Position sizing and risk controls.
 -   execution/: Order routing and execution algorithms.
 -   nalysis/: Statistical tests and backtesting.
+-   	ests/: Unit tests.
+-   config.yaml: Strategy and backtest configuration.
 
 ## Installation
 1.  Create a virtual environment:
@@ -25,12 +27,32 @@ This project implements a comprehensive quantitative trading strategy for Bitcoi
     `ash
     pip install -r requirements.txt
     `
+3.  Configure API Keys (Optional for real data):
+    -   Rename .env.example to .env (if exists) or create one.
+    -   Add BINANCE_API_KEY and BINANCE_SECRET.
+
+## Configuration
+The strategy parameters are defined in config.yaml. You can adjust:
+-   **Indicators**: MA windows, RSI thresholds, BB settings.
+-   **Risk**: Stop Loss / Take Profit multipliers (ATR based), Max Drawdown.
+-   **Backtest**: Symbol, timeframe, initial capital.
 
 ## Usage
-Run the full system integration test:
+### Run Backtest
+`ash
+python run_backtest.py
+`
+This will fetch data (or use mock), run the strategy, and generate a performance plot acktest_result_config.png.
+
+### Run System Pipeline Test
 `ash
 python main.py
 `
+
+## Backtest Results
+![Backtest Result](backtest_result_config.png)
+
+*Note: The above graph shows the equity curve from a simulation run.*
 
 ## Modules
 -   **Indicators**: Donchian, MA, RSI, BB, ATR, GARCH.
