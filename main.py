@@ -1,76 +1,103 @@
 ﻿import pandas as pd
-import numpy as np
+import yaml
+import sys
+
+# Import modules
+from data.fetcher import DataFetcher
 from strategy.indicators import Indicators
 from strategy.regime import RegimeDetection
-from filters.imbalance import OrderBookImbalance
-from filters.metalabeling import MetaLabeling
-from risk.sizing import PositionSizing
-from risk.guardrails import RiskGuardrails
-from execution.router import SmartOrderRouter
-from execution.algo import ExecutionAlgo
-from analysis.permutation import PermutationTest
+from strategy.logic import StrategyLogic
+from analysis.backtest import BacktestEngine
+from analysis.visualizer import Visualizer
 
-def run_pipeline():
-    print("--- Starting Quant Strategy Pipeline ---")
+def load_config(path='config.yaml'):
+    try:
+        with open(path, 'r', encoding='utf-8-sig') as file:
+            return yaml.safe_load(file)
+    except Exception as e:
+        print(f"Error loading config: {e}")
+        return None
 
-    # 1. Data Layer (Mock Data)
+def main():
+    print("--- Starting Quant Strategy Pipeline (Full Integration) ---")
+    
+    # 0. Load Config
+    config = load_config()
+    if not config:
+        print("Failed to load config. Exiting.")
+        return
+
+    # 1. Data Layer
     print("\n[1] Data Layer")
-    dates = pd.date_range(start='2023-01-01', periods=100, freq='1h')
-    df = pd.DataFrame({
-        'timestamp': dates,
-        'open': np.random.uniform(100, 110, 100),
-        'high': np.random.uniform(110, 120, 100),
-        'low': np.random.uniform(90, 100, 100),
-        'close': np.random.uniform(100, 110, 100),
-        'volume': np.random.uniform(1000, 5000, 100)
-    })
+    fetcher = DataFetcher()
+    symbol = config['backtest']['symbol']
+    timeframe = config['backtest']['timeframe']
+    limit = config['backtest']['limit']
+    
+    print(f"Fetching {limit} candles for {symbol} ({timeframe})...")
+    df = fetcher.fetch_ohlcv(symbol, timeframe, limit)
+    
+    if df is None or df.empty:
+        print("Warning: Failed to fetch real data. Using mock data for demonstration.")
+        # Mock data generation
+        dates = pd.date_range(start='2023-01-01', periods=limit, freq=timeframe)
+        df = pd.DataFrame({
+            'timestamp': dates,
+            'open': 100, 'high': 105, 'low': 95, 'close': 100, 'volume': 1000
+        })
+        import numpy as np
+        returns = np.random.normal(0, 0.01, limit)
+        price_path = 100 * np.cumprod(1 + returns)
+        df['close'] = price_path
+        df['open'] = price_path
+        df['high'] = price_path * 1.01
+        df['low'] = price_path * 0.99
+    
     print(f"Loaded {len(df)} data points.")
 
-    # 2. Strategy Layer
+    # 2. Strategy Layer (Indicators & Regime)
     print("\n[2] Strategy Layer")
-    df = Indicators.donchian_channel(df)
-    df = Indicators.atr(df)
-    
+    print("Calculating indicators...")
+    inds = config['strategy']['indicators']
+    df = Indicators.ma_crossover(df, short_window=inds['ma_short'], long_window=inds['ma_long'])
+    df = Indicators.rsi(df, window=inds['rsi_period'])
+    df = Indicators.bollinger_bands(df, window=inds['bb_window'], num_std=inds['bb_std'])
+    df = Indicators.atr(df, window=inds['atr_window'])
+    try:
+        df = Indicators.garch_volatility(df)
+    except:
+        df['garch_vol'] = 2.0
+
+    print("Detecting Regimes...")
     regime_detector = RegimeDetection(df)
     df = regime_detector.detect_regime()
     print(f"Current Regime: {df['regime'].iloc[-1]}")
 
-    # 3. Filter Layer
-    print("\n[3] Filter Layer")
-    # Mock Order Book
-    order_book = {'bids': [[99, 1], [98, 2]], 'asks': [[101, 1], [102, 1]]}
-    imbalance = OrderBookImbalance.calculate_imbalance(order_book)
-    print(f"Order Book Imbalance: {imbalance:.2f}")
+    # 3. Backtest / Execution Simulation
+    print("\n[3] Backtest & Execution Simulation")
+    engine = BacktestEngine(initial_capital=config['backtest']['initial_capital'])
+    logic = StrategyLogic(config)
 
-    # 4. Risk Layer
-    print("\n[4] Risk Layer")
-    sizer = PositionSizing(target_volatility=0.20)
-    current_vol = 0.15 # Mock annualized vol
-    capital = 10000
-    size = sizer.calculate_volatility_target_size(capital, current_vol)
-    print(f"Calculated Position Size: ")
+    def strategy_wrapper(row, capital, current_position):
+        return logic.get_signal(row, capital, current_position)
 
-    guard = RiskGuardrails()
-    guard.update_equity(10000)
-    guard.update_equity(9500)
-    is_breach = guard.check_drawdown(9500)
-    print(f"Drawdown Breach: {is_breach}")
+    print("Running Backtest Engine...")
+    results = engine.run(df, strategy_wrapper)
+    
+    final_equity = results['equity'].iloc[-1]
+    initial_cap = config['backtest']['initial_capital']
+    ret = ((final_equity - initial_cap) / initial_cap) * 100
+    print(f"Final Equity: ")
+    print(f"Total Return: {ret:.2f}%")
 
-    # 5. Execution Layer
-    print("\n[5] Execution Layer")
-    router = SmartOrderRouter()
-    algo = ExecutionAlgo(router)
-    # Simulate TWAP
-    algo.twap('BTC/USDT', 'buy', 1.0, duration_minutes=1)
-
-    # 6. Analysis Layer
-    print("\n[6] Analysis Layer")
-    perm = PermutationTest()
-    mock_returns = np.random.normal(0.001, 0.02, 100)
-    res = perm.run_test(mock_returns)
-    print(f"Permutation Test p-value: {res['p_value']:.4f}")
-
+    # 4. Visualization
+    print("\n[4] Visualization")
+    print("Generating performance plots...")
+    viz = Visualizer(results, df)
+    viz.plot_performance(filename='pipeline_performance.png')
+    
     print("\n--- Pipeline Completed Successfully ---")
+    print("Check 'pipeline_performance.png' for results.")
 
 if __name__ == "__main__":
-    run_pipeline()
+    main()
