@@ -97,3 +97,40 @@ class BacktestEngine:
             'fee': fee_amt
         })
         self.current_position = {'quantity': 0.0, 'entry_price': 0.0}
+
+    def calculate_metrics(self):
+        """
+        Calculate trading metrics: Profit Factor, Win Rate, Max Drawdown.
+        """
+        if not self.positions:
+            return {
+                'profit_factor': 0.0,
+                'win_rate': 0.0,
+                'total_trades': 0,
+                'max_drawdown': 0.0
+            }
+
+        gross_profit = sum(p['pnl'] for p in self.positions if p['pnl'] > 0)
+        gross_loss = sum(p['pnl'] for p in self.positions if p['pnl'] <= 0)
+        
+        profit_factor = gross_profit / abs(gross_loss) if gross_loss != 0 else float('inf')
+        
+        wins = len([p for p in self.positions if p['pnl'] > 0])
+        total_trades = len(self.positions)
+        win_rate = (wins / total_trades) * 100 if total_trades > 0 else 0.0
+
+        # Max Drawdown from equity curve
+        df = pd.DataFrame(self.equity_curve)
+        if not df.empty:
+            running_max = df['equity'].cummax()
+            drawdown = (df['equity'] - running_max) / running_max
+            max_drawdown = abs(drawdown.min()) * 100
+        else:
+            max_drawdown = 0.0
+
+        return {
+            'profit_factor': profit_factor,
+            'win_rate': win_rate,
+            'total_trades': total_trades,
+            'max_drawdown': max_drawdown
+        }

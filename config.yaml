@@ -9,10 +9,11 @@
     bb_window: 20
     bb_std: 2
     atr_window: 14
+    adx_threshold: 25
   risk:
     stop_loss_atr: 4.0
     take_profit_atr: 4.8
-    max_drawdown: 0.04
+    max_drawdown: 0.10
 backtest:
   initial_capital: 10000
   symbol: "BTC/USDT"

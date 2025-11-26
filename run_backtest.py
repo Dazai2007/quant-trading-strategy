@@ -68,7 +68,11 @@ def main():
 
     # 4. Run Backtest
     print("Running backtest engine...")
-    engine = BacktestEngine(initial_capital=config['backtest']['initial_capital'], fee=config['backtest'].get('fee', 0.0))
+    engine = BacktestEngine(
+        initial_capital=config['backtest']['initial_capital'], 
+        fee=config['backtest'].get('fee', 0.0),
+        max_drawdown=config['strategy']['risk'].get('max_drawdown', 0.20)
+    )
     logic = StrategyLogic(config)
     
     def strategy_wrapper(row, capital, current_position):
@@ -81,6 +85,9 @@ def main():
     initial_cap = config['backtest']['initial_capital']
     print(f"Final Equity: ")
     print(f"Return: {((final_equity - initial_cap)/initial_cap)*100:.2f}%")
+    
+    if engine.guardrails.circuit_breaker_triggered:
+        print("!!! CIRCUIT BREAKER TRIGGERED: Trading Halted due to Max Drawdown !!!")
 
     # 6. Visualize
     print("Generating plot...")

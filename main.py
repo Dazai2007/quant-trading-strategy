@@ -93,6 +93,12 @@ def main():
     print(f"Final Equity: ")
     print(f"Total Return: {ret:.2f}%")
     
+    # Advanced Metrics
+    metrics = engine.calculate_metrics()
+    print(f"Profit Factor: {metrics['profit_factor']:.2f}")
+    print(f"Win Rate: {metrics['win_rate']:.2f}% ({metrics['total_trades']} trades)")
+    print(f"Max Drawdown: {metrics['max_drawdown']:.2f}%")
+    
     # Check if circuit breaker triggered
     if engine.guardrails.circuit_breaker_triggered:
         print("!!! CIRCUIT BREAKER TRIGGERED: Trading Halted due to Max Drawdown !!!")

@@ -20,6 +20,7 @@ def objective(trial):
     config['strategy']['indicators']['ma_short'] = trial.suggest_int('ma_short', 10, 100)
     config['strategy']['indicators']['ma_long'] = trial.suggest_int('ma_long', 100, 300)
     config['strategy']['indicators']['rsi_period'] = trial.suggest_int('rsi_period', 10, 30)
+    # config['strategy']['indicators']['adx_threshold'] = trial.suggest_int('adx_threshold', 15, 40)
     config['strategy']['risk']['stop_loss_atr'] = trial.suggest_float('stop_loss_atr', 1.0, 5.0)
     config['strategy']['risk']['take_profit_atr'] = trial.suggest_float('take_profit_atr', 2.0, 10.0)
     
@@ -37,6 +38,7 @@ def objective(trial):
     df = Indicators.rsi(df, window=inds['rsi_period'])
     df = Indicators.bollinger_bands(df, window=inds['bb_window'], num_std=inds['bb_std'])
     df = Indicators.atr(df, window=inds['atr_window'])
+    # df = Indicators.adx(df, window=14)
     try:
         df = Indicators.garch_volatility(df)
     except:
@@ -54,21 +56,15 @@ def objective(trial):
 
     results = engine.run(df, strategy_wrapper)
     
-    # 6. Calculate Metric (Calmar Ratio Proxy: Return / Max Drawdown)
-    final_equity = results['equity'].iloc[-1]
-    initial_cap = config['backtest']['initial_capital']
-    total_return = (final_equity - initial_cap) / initial_cap
+    # 6. Calculate Metric: Profit Factor
+    metrics = engine.calculate_metrics()
+    profit_factor = metrics['profit_factor']
     
-    equity_series = results['equity']
-    running_max = equity_series.cummax()
-    drawdown = (equity_series - running_max) / running_max
-    max_drawdown = abs(drawdown.min())
-    
-    if max_drawdown == 0:
-        return total_return # Avoid div by zero
+    # Penalize low number of trades to avoid overfitting to 1 lucky trade
+    if metrics['total_trades'] < 5:
+        return 0.0
         
-    score = total_return / max_drawdown
-    return score
+    return profit_factor
 
 if __name__ == "__main__":
     print("--- Starting Optimization ---")
