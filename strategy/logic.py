@@ -11,24 +11,21 @@
         signal = 0
         
         # Entry Logic
-        # 1. Trend Following (MA Crossover)
-        # Buy if Short MA > Long MA AND RSI < Overbought AND ADX > Threshold (Strong Trend)
         adx_threshold = self.params['strategy']['indicators'].get('adx_threshold', 25)
         current_adx = row.get('adx', 0)
         
-        if row['ma_short'] > row['ma_long']:
-            if row['rsi'] < self.params['strategy']['indicators']['rsi_overbought']:
-                # if current_adx > adx_threshold: # Only enter if trend is strong
-                signal = 1
-        
-        # Sell if Short MA < Long MA AND RSI > Oversold AND ADX > Threshold
-        elif row['ma_short'] < row['ma_long']:
-            if row['rsi'] > self.params['strategy']['indicators']['rsi_oversold']:
-                # if current_adx > adx_threshold:
-                signal = -1
+        if row.get('regime') == 'TREND':
+            if row['ma_short'] > row['ma_long']:
+                if row['rsi'] < self.params['strategy']['indicators']['rsi_overbought']:
+                    if current_adx > adx_threshold:
+                        signal = 1
+            
+            elif row['ma_short'] < row['ma_long']:
+                if row['rsi'] > self.params['strategy']['indicators']['rsi_oversold']:
+                    if current_adx > adx_threshold:
+                        signal = -1
 
-        # Exit Logic (Stop Loss / Take Profit)
-        # Check if we are in a position
+        # Exit Logic (Trailing Stop & Fixed SL/TP)
         if current_position['quantity'] != 0:
             entry_price = current_position['entry_price']
             current_price = row['close']
@@ -36,34 +33,71 @@
             
             sl_atr = self.params['strategy']['risk']['stop_loss_atr']
             tp_atr = self.params['strategy']['risk']['take_profit_atr']
-
+            
+            # Trailing Stop Logic
+            # We use a simplified chandelier exit or ATR trailing stop
+            # For Long: Stop moves up to Highest High - (ATR * SL_ATR)
+            # For Short: Stop moves down to Lowest Low + (ATR * SL_ATR)
+            # Since we don't track Highest High since entry in this simple logic, 
+            # we will use Close - (ATR * SL_ATR) as a dynamic stop if it's better than fixed SL.
+            
+            # Actually, to implement proper trailing stop without state, we can check if
+            # current price reverted by X ATR from the extreme price since entry.
+            # But we don't have "extreme price since entry" in the row.
+            # So we will use a simpler "Breakeven" or "Dynamic" approach:
+            # If profit > 2 ATR, move SL to Entry + 0.5 ATR (Lock profit)
+            
+            # Better: Use Moving Average as Trailing Stop?
+            # Let's stick to the plan: Trailing Stop.
+            # Since we lack state of "highest price since entry", we can't do a perfect trailing stop.
+            # However, BacktestEngine tracks current_position.
+            # Let's implement a "Ratchet" Stop:
+            # If Price > Entry + 1 ATR, Move SL to Entry.
+            # If Price > Entry + 2 ATR, Move SL to Entry + 1 ATR.
+            
             # Long Position Exits
             if current_position['quantity'] > 0:
+                # Fixed SL
                 stop_loss = entry_price - (atr * sl_atr)
+                
+                # Trailing / Ratchet Logic
+                profit_atr = (current_price - entry_price) / atr
+                if profit_atr > 2.0:
+                    stop_loss = max(stop_loss, entry_price + (atr * 0.5)) # Lock 0.5 ATR
+                if profit_atr > 4.0:
+                    stop_loss = max(stop_loss, entry_price + (atr * 2.0)) # Lock 2.0 ATR
+                
                 take_profit = entry_price + (atr * tp_atr)
                 
                 if current_price <= stop_loss:
-                    return 2, 0 # Close Long (SL)
+                    return 2, 0 # Close Long (SL/Trailing)
                 if current_price >= take_profit:
                     return 2, 0 # Close Long (TP)
                 
-                # Reversal Exit
                 if signal == -1:
-                    return -1, self._calculate_size(capital, atr) # Close Long and Open Short
+                    return -1, self._calculate_size(capital, atr)
 
             # Short Position Exits
             elif current_position['quantity'] < 0:
+                # Fixed SL
                 stop_loss = entry_price + (atr * sl_atr)
+                
+                # Trailing / Ratchet Logic
+                profit_atr = (entry_price - current_price) / atr
+                if profit_atr > 2.0:
+                    stop_loss = min(stop_loss, entry_price - (atr * 0.5))
+                if profit_atr > 4.0:
+                    stop_loss = min(stop_loss, entry_price - (atr * 2.0))
+                
                 take_profit = entry_price - (atr * tp_atr)
                 
                 if current_price >= stop_loss:
-                    return -2, 0 # Close Short (SL)
+                    return -2, 0 # Close Short (SL/Trailing)
                 if current_price <= take_profit:
                     return -2, 0 # Close Short (TP)
 
-                # Reversal Exit
                 if signal == 1:
-                    return 1, self._calculate_size(capital, atr) # Close Short and Open Long
+                    return 1, self._calculate_size(capital, atr)
 
         # Calculate Size for New Entry
         size = 0
@@ -73,48 +107,4 @@
         return signal, size
 
     def _calculate_size(self, capital, atr):
-        # Volatility Targeting
-        target_vol = self.params['strategy']['target_volatility']
-        # Simple Vol Target: (Target Vol / Instrument Vol) * Capital
-        # Instrument Vol (Daily) ~= ATR / Price
-        # Here we use a simplified Kelly-like or Vol Target approach
-        
-        # Let's use Risk Based Sizing: Risk 1% of Capital per trade
-        # Risk Amount = Capital * 0.01
-        # Stop Loss Distance = 2 * ATR
-        # Size = Risk Amount / Stop Loss Distance * Price
-        
-        risk_per_trade = 0.02 # 2% risk
-        sl_distance = atr * self.params['strategy']['risk']['stop_loss_atr']
-        
-        if sl_distance == 0: return 0
-        
-        # Quantity = (Capital * Risk%) / SL Distance
-        # Size (USDT) = Quantity * Price
-        # Size = (Capital * Risk% * Price) / SL Distance
-        
-        # Cap size at 100% of capital (no leverage for now)
-        size = (capital * risk_per_trade) / sl_distance * 10000 # Scaling factor fix? No.
-        
-        # Correct formula:
-        # Risk = Qty * SL_Dist
-        # Qty = Risk / SL_Dist
-        # Size = Qty * Price
-        
-        risk_amt = capital * risk_per_trade
-        qty = risk_amt / sl_distance
-        size = qty * 50000 # Mock price... wait, we don't have price here easily without passing it.
-        # Actually we return size in USDT.
-        # Let's assume price is roughly constant for sizing or just return % of capital.
-        
-        # Better: Return size as % of capital based on Vol.
-        # If ATR is high, size is small.
-        
-        # Simplified for robustness:
-        # Size = Capital * (Target Vol / (ATR/Price)) ... hard without price.
-        
-        # Let's stick to fixed fractional for now, modified by Vol.
-        # Base size = 50% of capital.
-        # If ATR is high (> 2% of price), reduce size.
-        
-        return capital * 0.5 # Invest 50% of equity per trade
+        return capital * 0.1 # Invest 10% of equity per trade

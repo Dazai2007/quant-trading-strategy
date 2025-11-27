@@ -1,0 +1,52 @@
+--- Starting Multi-Asset Quant Strategy Pipeline ---
+Targeting 7 assets: ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD', 'DOT-USD', 'FIL-USD']
+
+--- Processing BTC-USD ---
+Fetching 18000 candles for BTC-USD (1h)...
+Fetching BTC-USD from Yahoo (Period: 2y, Interval: 1h)...
+Fetched 17444 rows from Yahoo.
+
+--- Processing ETH-USD ---
+Fetching 18000 candles for ETH-USD (1h)...
+Fetching ETH-USD from Yahoo (Period: 2y, Interval: 1h)...
+Fetched 17443 rows from Yahoo.
+
+--- Processing SOL-USD ---
+Fetching 18000 candles for SOL-USD (1h)...
+Fetching SOL-USD from Yahoo (Period: 2y, Interval: 1h)...
+Fetched 17443 rows from Yahoo.
+
+--- Processing BNB-USD ---
+Fetching 18000 candles for BNB-USD (1h)...
+Fetching BNB-USD from Yahoo (Period: 2y, Interval: 1h)...
+Fetched 17444 rows from Yahoo.
+
+--- Processing AVAX-USD ---
+Fetching 18000 candles for AVAX-USD (1h)...
+Fetching AVAX-USD from Yahoo (Period: 2y, Interval: 1h)...
+Fetched 17443 rows from Yahoo.
+
+--- Processing DOT-USD ---
+Fetching 18000 candles for DOT-USD (1h)...
+Fetching DOT-USD from Yahoo (Period: 2y, Interval: 1h)...
+Fetched 17444 rows from Yahoo.
+
+--- Processing FIL-USD ---
+Fetching 18000 candles for FIL-USD (1h)...
+Fetching FIL-USD from Yahoo (Period: 2y, Interval: 1h)...
+Fetched 17444 rows from Yahoo.
+
+============================================================
+SYMBOL     | PF     | WR%    | TRADES | MDD%   | RETURN% 
+------------------------------------------------------------
+BTC-USD    | 1.31   | 56.05  | 157    | 13.34  | 19.97   
+ETH-USD    | 1.33   | 52.34  | 107    | 15.25  | 19.87   
+SOL-USD    | 1.17   | 67.65  | 34     | 17.31  | 5.05    
+BNB-USD    | 1.16   | 53.29  | 152    | 15.27  | 8.78    
+AVAX-USD   | 1.28   | 59.78  | 92     | 15.16  | 26.17   
+DOT-USD    | 1.25   | 60.00  | 30     | 15.34  | 5.69    
+FIL-USD    | 1.22   | 55.05  | 109    | 15.30  | 20.00   
+------------------------------------------------------------
+AVERAGE    | 1.25   | -      | -      | -      | 15.08   
+============================================================
+Check individual logs for details.

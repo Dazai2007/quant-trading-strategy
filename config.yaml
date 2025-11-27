@@ -1,23 +1,30 @@
-﻿strategy:
+﻿backtest:
+  source: "yahoo"
+  initial_capital: 10000
+  symbols: 
+    - "BTC-USD"
+    - "ETH-USD"
+    - "SOL-USD"
+    - "BNB-USD"
+    - "AVAX-USD"
+    - "DOT-USD"
+    - "FIL-USD"
+  timeframe: "1h"
+  limit: 18000
+  fee: 0.001
+strategy:
   target_volatility: 0.20
   indicators:
-    ma_short: 21
-    ma_long: 140
+    ma_short: 20
+    ma_long: 139
     rsi_period: 28
     rsi_overbought: 70
     rsi_oversold: 30
     bb_window: 20
     bb_std: 2
     atr_window: 14
-    adx_threshold: 25
+    adx_threshold: 32
   risk:
-    stop_loss_atr: 4.0
-    take_profit_atr: 4.8
-    max_drawdown: 0.10
-backtest:
-  source: "yahoo"
-  initial_capital: 10000
-  symbol: "BTC-USD"
-  timeframe: "1h"
-  limit: 1000
-  fee: 0.001
+    stop_loss_atr: 3.06
+    take_profit_atr: 2.88
+    max_drawdown: 0.15

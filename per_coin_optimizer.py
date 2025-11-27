@@ -13,6 +13,8 @@ def load_config(path='config.yaml'):
         return yaml.safe_load(file)
 
 def objective(trial):
+    global current_symbol, cached_df
+    
     # 1. Load Base Config
     config = load_config()
     
@@ -20,18 +22,17 @@ def objective(trial):
     config['strategy']['indicators']['ma_short'] = trial.suggest_int('ma_short', 10, 100)
     config['strategy']['indicators']['ma_long'] = trial.suggest_int('ma_long', 100, 300)
     config['strategy']['indicators']['rsi_period'] = trial.suggest_int('rsi_period', 10, 30)
-    config['strategy']['indicators']['adx_threshold'] = trial.suggest_int('adx_threshold', 10, 30)
-    config['strategy']['risk']['stop_loss_atr'] = trial.suggest_float('stop_loss_atr', 1.0, 5.0)
-    config['strategy']['risk']['take_profit_atr'] = trial.suggest_float('take_profit_atr', 2.0, 10.0)
+    config['strategy']['indicators']['adx_threshold'] = trial.suggest_int('adx_threshold', 15, 35)
+    config['strategy']['risk']['stop_loss_atr'] = trial.suggest_float('stop_loss_atr', 2.0, 5.0)
+    config['strategy']['risk']['take_profit_atr'] = trial.suggest_float('take_profit_atr', 2.0, 8.0)
     
     # 3. Prepare Data
-    global cached_df
     if cached_df is None or cached_df.empty:
         return 0.0
         
     df = cached_df.copy()
 
-    # 4. Recalculate Indicators (Dynamic based on params)
+    # 4. Recalculate Indicators
     inds = config['strategy']['indicators']
     df = Indicators.ma_crossover(df, short_window=inds['ma_short'], long_window=inds['ma_long'])
     df = Indicators.rsi(df, window=inds['rsi_period'])
@@ -46,7 +47,7 @@ def objective(trial):
     regime = RegimeDetection(df)
     df = regime.detect_regime()
 
-    # 5. Run Backtest (Enable CB)
+    # 5. Run Backtest
     engine = BacktestEngine(
         initial_capital=config['backtest']['initial_capital'], 
         fee=config['backtest'].get('fee', 0.001),
@@ -64,45 +65,68 @@ def objective(trial):
     profit_factor = metrics['profit_factor']
     win_rate = metrics['win_rate']
     
-    # Constraints
-    if metrics['total_trades'] < 100: 
+    # Constraints (Relaxed for per-coin)
+    if metrics['total_trades'] < 20: 
         return 0.0
-    if win_rate < 50.0: 
+    if win_rate < 45.0: 
         return 0.0
         
-    print(f"Trial {trial.number}: PF={profit_factor:.2f}, WR={win_rate:.2f}%, Trades={metrics['total_trades']}")
-    return profit_factor
+    # Multi-objective: PF + WR bonus
+    score = profit_factor + (win_rate / 100.0)
+    
+    print(f"  Trial {trial.number}: PF={profit_factor:.2f}, WR={win_rate:.2f}%, Trades={metrics['total_trades']}, Score={score:.2f}")
+    return score
 
-if __name__ == "__main__":
-    print("--- Starting Optimization with Real Data ---")
+def optimize_coin(symbol, config):
+    global current_symbol, cached_df
+    current_symbol = symbol
     
-    # Load Config to get source
-    config = load_config()
+    print(f"\n--- Optimizing {symbol} ---")
+    
+    # Fetch data
     source = config['backtest'].get('source', 'yahoo')
-    symbol = config['backtest']['symbol']
-    timeframe = config['backtest']['timeframe']
-    limit = 18000 # Force 2 years
-    
-    print(f"Fetching data from {source} for {symbol}...")
-    
-    # Load Data Once
     fetcher = DataFetcher(source=source)
+    timeframe = config['backtest']['timeframe']
+    limit = 18000
+    
+    print(f"Fetching data...")
     cached_df = fetcher.fetch_ohlcv(symbol, timeframe, limit=limit)
     
     if cached_df is None or cached_df.empty:
-        print("!!! ERROR: Failed to fetch real data for optimization. Exiting. !!!")
-        exit(1)
+        print(f"!!! ERROR: No data for {symbol}. Skipping. !!!")
+        return None
     
-    print(f"Loaded {len(cached_df)} rows.")
-
+    print(f"Running optimization (20 trials)...")
     study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=50) 
+    study.optimize(objective, n_trials=20, show_progress_bar=False) 
 
-    print("Number of finished trials: ", len(study.trials))
-    print("Best trial:")
+    print(f"Best trial for {symbol}:")
     trial = study.best_trial
+    print(f"  Score: {trial.value:.2f}")
+    print(f"  Params: {trial.params}")
+    
+    return trial.params
 
-    print("  Value: ", trial.value)
-    print("  Params: ")
-    for key, value in trial.params.items():
-        print(f"    {key}: {value}")
+if __name__ == "__main__":
+    print("--- Per-Coin Optimization ---")
+    
+    config = load_config()
+    symbols = config['backtest']['symbols']
+    
+    results = {}
+    
+    for symbol in symbols:
+        try:
+            params = optimize_coin(symbol, config)
+            if params:
+                results[symbol] = params
+        except Exception as e:
+            print(f"Error optimizing {symbol}: {e}")
+    
+    print("\n" + "="*60)
+    print("OPTIMIZATION RESULTS")
+    print("="*60)
+    for symbol, params in results.items():
+        print(f"{symbol}: {params}")
+    
+    print("\nSave these to config manually or run a verification backtest.")
