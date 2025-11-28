@@ -1,12 +1,16 @@
 ﻿import yaml
 import pandas as pd
 import numpy as np
+import os
+from dotenv import load_dotenv
 from data.fetcher import DataFetcher
 from strategy.indicators import Indicators
 from strategy.regime import RegimeDetection
 from strategy.logic import StrategyLogic
 from analysis.backtest import BacktestEngine
 from analysis.visualizer import Visualizer
+from utils.telegram_notifier import TelegramNotifier
+import time
 
 def load_config(path='config.yaml'):
     with open(path, 'r', encoding='utf-8-sig') as file:
@@ -71,6 +75,22 @@ def run_strategy_for_symbol(symbol, config):
 def main():
     print("--- Starting Multi-Asset Quant Strategy Pipeline ---")
     
+    # Load environment variables
+    load_dotenv()
+    
+    # Initialize Telegram notifier
+    telegram = None
+    try:
+        bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        chat_id = os.getenv('TELEGRAM_CHAT_ID')
+        if bot_token and chat_id:
+            telegram = TelegramNotifier(bot_token, chat_id)
+            print(" Telegram notifications enabled")
+        else:
+            print(" Telegram credentials not found in .env")
+    except Exception as e:
+        print(f" Telegram initialization failed: {e}")
+    
     config = load_config()
     if not config:
         print("Failed to load config. Exiting.")
@@ -84,7 +104,15 @@ def main():
         
     print(f"Targeting {len(symbols)} assets: {symbols}")
     
+    # Send start notification
+    if telegram:
+        try:
+            telegram.send_start_notification(symbols)
+        except Exception as e:
+            print(f" Failed to send start notification: {e}")
+    
     portfolio_results = []
+    start_time = time.time()
     
     for symbol in symbols:
         try:
@@ -93,6 +121,11 @@ def main():
                 portfolio_results.append(res)
         except Exception as e:
             print(f"Error processing {symbol}: {e}")
+            if telegram:
+                try:
+                    telegram.send_alert("Backtest Hatası", f"{symbol}: {str(e)}")
+                except:
+                    pass
             
     # Portfolio Summary
     print("\n" + "="*60)
@@ -118,6 +151,16 @@ def main():
     
     print("="*60)
     print("Check individual logs for details.")
+    
+    # Send portfolio summary to Telegram
+    if telegram and portfolio_results:
+        try:
+            telegram.send_portfolio_summary(portfolio_results)
+            duration = time.time() - start_time
+            telegram.send_completion(duration)
+            print(" Portfolio summary sent to Telegram")
+        except Exception as e:
+            print(f" Failed to send Telegram summary: {e}")
 
 if __name__ == "__main__":
     main()
