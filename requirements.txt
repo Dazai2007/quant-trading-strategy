@@ -8,3 +8,5 @@ scipy
 pyarrow
 python-dotenv
 pyyaml
+yfinance
+optuna
